@@ -1,0 +1,145 @@
+---
+title: 'Project 1: Wrangling, Exploration, Visualization'
+author: "SDS322E"
+date: ''
+output:
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+  pdf_document:
+    toc: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, fig.align = "center", warning = F, message = F,
+tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
+```
+
+## Data Wrangling, Exploration, Visualization
+
+### Alice Liu AL47697
+
+#### Introduction 
+
+Paragraph or two introducing your datasets and variables, why they are interesting to you, etc.
+
+```{R}
+library(tidyverse)
+library(readr)
+setwd("~/project1-main")
+mw_data = read.csv('Minimum Wage Data.csv')
+crime = read_csv('US_violent_crime.csv')
+
+
+```
+
+*I found both datasets off of kaggle.  My first dataset is the minimum wage data (mw_data) by state in the US from 1969 to 2020.  My second dataset is violent crime arrest rate (crime) by state in 1973.  The variables in mw_data are year, state, actual state's minimum wage, state minimum wage in 2020 dollars, actual federal minimum wage, federal minimum wage in 2020 dollars, effective minimum wage, because if the state minimum wage is lower, it will assume the federal minimum wage.  The remaining 6 columns in the mw_data dataset are average CPI (consumer price index), Department of Labor's unclean, scraped data, Department of Labor's lowest minimum wage (the one not enforced), the Department of Labor's lowest minimum wage in 2020 dollars, the Department of Labor's higher, enforced minimum wage, and lastly, the Department of Labor's higher, enforced minimum wage in 2020 dollars.  My second dataset (crime) only has four variables: state, murder rate (per 100,000), assault rate (per 100,000), percent of urban population, and rape rate (per 100,000). I am interested in if there is a relationship between effective minimum wage and crime rate. Since many claim that the cost of living correlates to minimum wage, I would predict that minimum wage and crime rate would have an inverse relationship. In this project, I will want to use the effective minimum wage (in 2020 dollars) for each state in 1973, since my 'crime' dataset only has data from 1973.* 
+
+#### Tidying: Reshaping
+
+If your datasets are tidy already, demonstrate that you can reshape data with pivot wider/longer here (e.g., untidy and then retidy). Alternatively, it may be easier to wait until the wrangling section so you can reshape your summary statistics. Note here if you are going to do this.
+
+```{R}
+# My datasets are tidy already, so I will untidy, then retidy & used it later in the project
+mw_data %>% select(1:2, Effective.Minimum.Wage) %>% pivot_wider(names_from = Year, values_from = Effective.Minimum.Wage) -> mw_wider
+mw_wider
+mw_wider %>% pivot_longer(2:54, names_to = "Year", values_to = "Effective.Minimum.Wage")
+
+```
+*To tidy the the minimum wage dataset, I selected 3 columns: State, Year, and Effective Minimum Wage.  I then used pivot wider to widen the dataset by having 'Year' as my variables and minimum wage as my values.  I chose 'Year' because it is easier to visualize how minimum wage changes each year per state.  Afterwards, I pivoted longer to retidy my data. *
+    
+#### Joining/Merging
+
+```{R}
+statedata <- left_join(crime, mw_data, by = c("X1" = "State"))
+joined <- left_join(crime, mw_data, by = c("X1" = "State"))
+nrow(mw_data)
+nrow(crime)
+nrow(joined)
+```
+
+*I decided to do a left join with crime being my first dataframe, and then adding rows with matches from my minimum wage dataframe.  I did this because my minimum wage dataframe includes the 50 states, DC, Guam, Pureto Rico, and the US Virgin Islands, whereas the 'crime' dataframe only has the United States' 50 states.  Therefore, the US territories and DC would have NA for murder, assault, urban population, and rape if I were to do a full join. Therefore, the observations dropped were the 3 territories and DC. I do not see many problems with this, since they have smaller populations compared to the 50 states, their datapoints/values may be outliers of my data.  Total of observations after I joined is 2650, which makes sense because there are 50 states for the 53 years from my minimum wage dataset. My crime dataset has 50 rows; minimum wage dataset has 2862 rows. *
+
+####  Wrangling
+
+```{R}
+#Dplyr functions: 
+statedata <- statedata %>% filter(Year == 1973) #Since my crime dataset only has stats from 1973, I want to filter out the years that are not from 1973. 
+
+statedata <- statedata %>% select(1:5, Effective.Minimum.Wage.2020.Dollars) #Only using Effective Min. Wage in 2020 dollars because of the reason mentioned in the introduction.
+
+statedata <- statedata %>% mutate(totalcrime = Murder+Assault+Rape) #New variable is total violent crime rate (per 100,000)
+
+statedata %>% arrange(desc(totalcrime)) #Visualize the states with the highest crime rates per 100,000
+
+statedata <- statedata %>% rename(State = X1) %>% rename(min_wage = Effective.Minimum.Wage.2020.Dollars) #Renaming X1 to State & 'Effective.Minimum.Wage.2020.Dollars' to min_wage to make it easier
+
+statedata %>% group_by(State) %>% summarize(minwage_crime_ratio = min_wage/totalcrime) %>% arrange(minwage_crime_ratio) #Outputs minimum wage to total crime ratio in ascending order
+
+sum(str_detect(statedata$State, "^A")) # There are 4 states in the U.S. that start with the letter "A".
+
+#Summary Statistics
+
+statedata %>% summarize(correlation = cor(min_wage, totalcrime))#correlation between minimum wage and total crime rate
+statedata %>% summarize(correlation = cor(Murder, totalcrime)) #correlation between murder rate and total crime rate
+statedata %>% summarize(correlation = cor(Assault, totalcrime)) #correlation between assault rate and total crime rate
+statedata %>% summarize(correlation = cor(Rape, totalcrime)) #correlation between rape rate and total crime rate
+statedata %>% summarize(mean = mean(Murder)) #mean of murder rates for all the states
+statedata %>% summarize(sd = sd(min_wage)) #standard deviation of minimum wage for all the states
+statedata %>% summarize(var = var(UrbanPop)) #variance of urban population percentage
+statedata %>% summarize(distinct = n_distinct(min_wage)) # number of distinct minimum wage values
+
+statedata %>% mutate(lowcrime = totalcrime<=185) %>% group_by(lowcrime) %>% summarize(mean_urbanpop = mean(UrbanPop)) #'low crime' was determined by finding the median of total crime, 185, and if it is less than 185, then the state is TRUE for lowcrime
+statedata %>% mutate(lowcrime = totalcrime<=185) %>% group_by(lowcrime) %>% summarize(sd_urbanpop = sd(UrbanPop))
+
+min_median_max <- function(x){
+    array1 <- quantile(x, c(0, .5, 1))
+    data.frame(minimum = array1[1], median = array1[2], maximum = array1[3])
+}
+
+statedata %>% summarize(min_median_max(Murder))
+statedata %>% summarize(min_median_max(Assault))
+statedata %>% summarize(min_median_max(UrbanPop))
+statedata %>% summarize(min_median_max(Rape))
+statedata %>% summarize(min_median_max(min_wage))
+statedata %>% summarize(min_median_max(totalcrime))
+
+library(kableExtra)
+statedata %>% kbl(caption = "State Data in 1973") %>% kable_classic(full_width = F, html_font = "Cambria")
+
+```
+
+*I commented the procedures in the code above, so the following will only be about what I found interesting. To me, it is interesting that the correlation between minimum wage and total crime rate is very low: 0.162.  In addition, the states with lower crime has a similar mean and sd to the states with higher crime. Also, the number of distinct minimum wage values was surprisingly low.  Apparently, most states  assume the federal minimum wage.  The function that I wrote determines the minimum, median, and maximum of each variable. For my table, I used the 'kable' package.*
+
+
+#### Visualizing
+
+```{R}
+ggplot(data = statedata, aes(x = min_wage, y = totalcrime)) + geom_point(size = 3, aes(color = State)) + geom_smooth(method = "lm") + theme(legend.position = "none") + xlab("Minimum Wage(in 2020 dollars)") + ylab("Crime Rate(per 100,000)") + ggtitle("Minimum Wage v. Crime Rate")
+```
+
+*My first plot demonstrates the reason why I was interested in this dataset: the relationship between minimum wage and crime rate.  However, you can see that the relationship is pretty much non-existent, which is conclusive with the section above where I found that the correlation was 0.162. I predicted that the relationship would be inversely related; however, I was completely wrong, since there is a weak positive correlation between the two. *
+
+```{R}
+ggplot(data = statedata, aes(x = UrbanPop, y = totalcrime)) + geom_point(aes(color = State)) + geom_smooth(method = "lm") + theme(legend.position = "none")+ xlab("Percent of Urban Population") + ylab("Crime Rate(per 100,000)") + ggtitle("Urban Population Percentage v. Crime Rate")
+```
+
+*I then moved on to see if there was a correlation between urban population and crime rate. I assumed that the correlation would be strong and positive, since urban populations are more dense and therefore more crime occurs.  However, I was wrong once again. While the correlation is positive, it is pretty weak.*
+
+```{R}
+statedatalonger <- statedata %>% pivot_longer(c("Murder", "Assault", "Rape"), names_to = "crimetype", values_to = "rate")
+
+ggplot(data = statedatalonger, aes(x = crimetype, y = rate, fill = crimetype)) + geom_bar(stat = "summary") + xlab("Type of Crime") + ylab("Rate (per 100,000)") + ggtitle("1973 Crime Rate in US") + scale_y_continuous(breaks = seq(0,200, by = 25)) + theme(legend.position = "none")
+```
+
+*This plot shows the distribution of the type of crime. As you can see, the most common type of crime is assault, followed by rape, the murder. In the previous section, I used a lot of 'totalcrime' which is the sum of all three types of crime rates.  I wanted to show this graph to display how it is distributed* 
+
+#### Concluding Remarks
+
+My initial hypothesis was that there is a strong, inverse relationship between minimum wage and crime rates in 1973.  However, the data proves otherwise.  There is a fairly weak, positive relationship between the two variables.  
+
+
+
+
